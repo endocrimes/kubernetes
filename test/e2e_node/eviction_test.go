@@ -454,6 +454,18 @@ var _ = SIGDescribe("PriorityLocalStorageEvictionOrdering [Slow] [Serial] [Disru
 	})
 })
 
+// var _ = SIGDescribe("PIDAccountingIsFunctional [Slow]", func() {
+// 	f := framework.NewDefaultFramework("pid-accounting-test")
+// 	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
+
+// 	ginkgo.It("should report stats for pid consumption within a container", func() {
+// 		pod := pidConsumingPod("container-that-consumes-pids", 100)
+// 		f.PodClient().Create(pod)
+
+// 		e2epod.WaitForPodCondition(f.ClientSet, pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, "Ready", 120*time.Second, testutils.PodRunningReady)
+// 	})
+// })
+
 // PriorityPidEvictionOrdering tests that the node emits pid pressure in response to a fork bomb, and evicts pods by priority
 var _ = SIGDescribe("PriorityPidEvictionOrdering [Slow] [Serial] [Disruptive][NodeFeature:Eviction]", func() {
 	f := framework.NewDefaultFramework("pidpressure-eviction-test")
@@ -467,7 +479,7 @@ var _ = SIGDescribe("PriorityPidEvictionOrdering [Slow] [Serial] [Disruptive][No
 
 	ginkgo.Context(fmt.Sprintf(testContextFmt, expectedNodeCondition), func() {
 		tempSetCurrentKubeletConfig(f, func(initialConfig *kubeletconfig.KubeletConfiguration) {
-			pidsConsumed := int64(10000)
+			pidsConsumed := int64(1000)
 			summary := eventuallyGetSummary()
 			availablePids := *(summary.Node.Rlimit.MaxPID) - *(summary.Node.Rlimit.NumOfRunningProcesses)
 			initialConfig.EvictionHard = map[string]string{string(evictionapi.SignalPIDAvailable): fmt.Sprintf("%d", availablePids-pidsConsumed)}
@@ -484,7 +496,7 @@ var _ = SIGDescribe("PriorityPidEvictionOrdering [Slow] [Serial] [Disruptive][No
 		specs := []podEvictSpec{
 			{
 				evictionPriority: 2,
-				pod:              pidConsumingPod("fork-bomb-container-with-low-priority", 12000),
+				pod:              pidConsumingPod("fork-bomb-container-with-low-priority", 1001),
 			},
 			{
 				evictionPriority: 0,
@@ -492,7 +504,7 @@ var _ = SIGDescribe("PriorityPidEvictionOrdering [Slow] [Serial] [Disruptive][No
 			},
 			{
 				evictionPriority: 1,
-				pod:              pidConsumingPod("fork-bomb-container-with-high-priority", 12000),
+				pod:              pidConsumingPod("fork-bomb-container-with-high-priority", 1001),
 			},
 		}
 		specs[1].pod.Spec.PriorityClassName = highPriorityClassName
@@ -522,9 +534,11 @@ func runEvictionTest(f *framework.Framework, pressureTimeout time.Duration, expe
 		ginkgo.BeforeEach(func() {
 			// reduce memory usage in the allocatable cgroup to ensure we do not have MemoryPressure
 			reduceAllocatableMemoryUsageIfCgroupv1()
+
 			// Nodes do not immediately report local storage capacity
 			// Sleep so that pods requesting local storage do not fail to schedule
 			time.Sleep(30 * time.Second)
+
 			ginkgo.By("setting up pods to be used by tests")
 			pods := []*v1.Pod{}
 			for _, spec := range testSpecs {
@@ -694,8 +708,8 @@ func verifyEvictionOrdering(f *framework.Framework, testSpecs []podEvictSpec) er
 			gomega.Expect(lowPriorityPod).NotTo(gomega.BeNil())
 			if priorityPodSpec.evictionPriority < lowPriorityPodSpec.evictionPriority && lowPriorityPod.Status.Phase == v1.PodRunning {
 				framework.ExpectNotEqual(priorityPod.Status.Phase, v1.PodFailed,
-					fmt.Sprintf("priority %d pod: %s failed before priority %d pod: %s",
-						priorityPodSpec.evictionPriority, priorityPodSpec.pod.Name, lowPriorityPodSpec.evictionPriority, lowPriorityPodSpec.pod.Name))
+					fmt.Sprintf("priority %d pod: %s failed before priority %d pod: %s. Pod fail reason: %s",
+						priorityPodSpec.evictionPriority, priorityPodSpec.pod.Name, lowPriorityPodSpec.evictionPriority, lowPriorityPodSpec.pod.Name, priorityPod.Status.Reason))
 			}
 		}
 
@@ -716,9 +730,11 @@ func verifyEvictionOrdering(f *framework.Framework, testSpecs []podEvictSpec) er
 			done = false
 		}
 	}
+
 	if done {
 		return nil
 	}
+
 	return fmt.Errorf("pods that should be evicted are still running: %#v", pendingPods)
 }
 

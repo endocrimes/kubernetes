@@ -586,6 +586,8 @@ func (p *criStatsProvider) addProcessStats(
 		ps.ProcessStats = cadvisorInfoToProcessStats(info)
 		return
 	}
+
+	klog.V(4).InfoS("Unable to find process stats", "podID", podUID)
 }
 
 func (p *criStatsProvider) makeContainerStats(

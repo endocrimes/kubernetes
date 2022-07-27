@@ -547,6 +547,7 @@ func process(stats statsFunc) cmpFunc {
 	return func(p1, p2 *v1.Pod) int {
 		p1Stats, p1Found := stats(p1)
 		p2Stats, p2Found := stats(p2)
+		klog.InfoS("Comparing pods", "p1", klog.KObj(p1), "p1_found", p1Found, "p2", klog.KObj(p2), "p2_found", p2Found)
 		if !p1Found || !p2Found {
 			// prioritize evicting the pod for which no stats were found
 			return cmpBool(!p1Found, !p2Found)
@@ -554,6 +555,7 @@ func process(stats statsFunc) cmpFunc {
 
 		p1Process := processUsage(p1Stats.ProcessStats)
 		p2Process := processUsage(p2Stats.ProcessStats)
+		klog.InfoS("Comparing pods", "p1", klog.KObj(p1), "p1_usage", p1Process, "p2", klog.KObj(p2), "p2_usage", p2Process)
 		// prioritize evicting the pod which has the larger consumption of process
 		return int(p2Process - p1Process)
 	}

@@ -1,7 +1,11 @@
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
+
 cgroupDriver: cgroupfs
-cgroupRoot: /
+cgroupRoot: "/"
+cgroupsPerQos: true
+runtimeCgroups: "/system.slice/containerd.service"
+systemCgroups: "/system.slice"
 
 # Assign a fixed CIDR to the node because we do not run a node controller
 # This MUST be in sync with IPs in:

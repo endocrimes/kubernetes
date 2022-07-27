@@ -171,6 +171,7 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 	// root PID (systemd services don't have the root PID atm)
 	if h.includedMetrics.Has(container.ProcessMetrics) {
 		path, ok := common.GetControllerPath(h.cgroupManager.GetPaths(), "cpu", cgroups.IsCgroup2UnifiedMode())
+		klog.V(4).InfoS("InfoDump", "Paths", h.cgroupManager.GetPaths(), "V2?", cgroups.IsCgroup2UnifiedMode(), "ConstructedPath", path, "RootFS", h.rootFs, "pid", h.pid)
 		if !ok {
 			klog.V(4).Infof("Could not find cgroups CPU for container %d", h.pid)
 		} else {
@@ -178,10 +179,11 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 			if err != nil {
 				klog.V(4).Infof("Unable to get Process Stats: %v", err)
 			}
-		}
-
-		// if include processes metrics, just set threads metrics if exist, and has no relationship with cpu path
+			klog.V(4).InfoS("ProcessMetrics", "pid", h.pid, "paths", h.cgroupManager.GetPaths(), "stats", stats.Processes)
+		} // if include processes metrics, just set threads metrics if exist, and has no relationship with cpu path
 		setThreadsStats(cgroupStats, stats)
+	} else {
+		klog.V(4).Infof("Skipping ProcessMetrics for container: %d", h.pid)
 	}
 
 	// For backwards compatibility.

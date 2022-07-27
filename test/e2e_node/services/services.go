@@ -119,7 +119,7 @@ const (
 	// services.log is the combined log of all services
 	servicesLogFile = "services.log"
 	// LogVerbosityLevel is consistent with the level used in a cluster e2e test.
-	LogVerbosityLevel = "4"
+	LogVerbosityLevel = "8"
 )
 
 // startInternalServices starts the internal services in a separate process.
