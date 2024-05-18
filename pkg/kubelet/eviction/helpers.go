@@ -1243,32 +1243,44 @@ func evictionMessage(resourceToReclaim v1.ResourceName, pod *v1.Pod, stats stats
 	if !ok {
 		return
 	}
+
+	updateUsageMessageForContainer := func(containerStats statsapi.ContainerStats, container v1.Container) {
+		requests := container.Resources.Requests[resourceToReclaim]
+		if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) &&
+			(resourceToReclaim == v1.ResourceMemory || resourceToReclaim == v1.ResourceCPU) {
+			if cs, ok := podutil.GetContainerStatus(pod.Status.ContainerStatuses, container.Name); ok {
+				requests = cs.AllocatedResources[resourceToReclaim]
+			}
+		}
+		var usage *resource.Quantity
+		switch resourceToReclaim {
+		case v1.ResourceEphemeralStorage:
+			if containerStats.Rootfs != nil && containerStats.Rootfs.UsedBytes != nil && containerStats.Logs != nil && containerStats.Logs.UsedBytes != nil {
+				usage = resource.NewQuantity(int64(*containerStats.Rootfs.UsedBytes+*containerStats.Logs.UsedBytes), resource.BinarySI)
+			}
+		case v1.ResourceMemory:
+			if containerStats.Memory != nil && containerStats.Memory.WorkingSetBytes != nil {
+				usage = resource.NewQuantity(int64(*containerStats.Memory.WorkingSetBytes), resource.BinarySI)
+			}
+		}
+		if usage != nil && usage.Cmp(requests) > 0 {
+			message += fmt.Sprintf(containerMessageFmt, container.Name, usage.String(), requests.String(), resourceToReclaim)
+			containers = append(containers, container.Name)
+			containerUsage = append(containerUsage, usage.String())
+		}
+	}
+
 	for _, containerStats := range podStats.Containers {
+		if utilfeature.DefaultFeatureGate.Enabled(features.SidecarContainers) {
+			for _, container := range pod.Spec.InitContainers {
+				if kubetypes.IsRestartableInitContainer(&container) {
+					updateUsageMessageForContainer(containerStats, container)
+				}
+			}
+		}
 		for _, container := range pod.Spec.Containers {
 			if container.Name == containerStats.Name {
-				requests := container.Resources.Requests[resourceToReclaim]
-				if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) &&
-					(resourceToReclaim == v1.ResourceMemory || resourceToReclaim == v1.ResourceCPU) {
-					if cs, ok := podutil.GetContainerStatus(pod.Status.ContainerStatuses, container.Name); ok {
-						requests = cs.AllocatedResources[resourceToReclaim]
-					}
-				}
-				var usage *resource.Quantity
-				switch resourceToReclaim {
-				case v1.ResourceEphemeralStorage:
-					if containerStats.Rootfs != nil && containerStats.Rootfs.UsedBytes != nil && containerStats.Logs != nil && containerStats.Logs.UsedBytes != nil {
-						usage = resource.NewQuantity(int64(*containerStats.Rootfs.UsedBytes+*containerStats.Logs.UsedBytes), resource.BinarySI)
-					}
-				case v1.ResourceMemory:
-					if containerStats.Memory != nil && containerStats.Memory.WorkingSetBytes != nil {
-						usage = resource.NewQuantity(int64(*containerStats.Memory.WorkingSetBytes), resource.BinarySI)
-					}
-				}
-				if usage != nil && usage.Cmp(requests) > 0 {
-					message += fmt.Sprintf(containerMessageFmt, container.Name, usage.String(), requests.String(), resourceToReclaim)
-					containers = append(containers, container.Name)
-					containerUsage = append(containerUsage, usage.String())
-				}
+				updateUsageMessageForContainer(containerStats, container)
 			}
 		}
 	}
